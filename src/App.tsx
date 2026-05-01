@@ -265,7 +265,10 @@ export default function App() {
       if (value === 'tijolo') newData.spread = 3;
       else if (value === 'papel') newData.spread = 1;
       else newData.spread = 2; // misto
+    } else if (field === 'ticker') {
+      newData.ticker = value.toUpperCase();
     } else {
+      // Se o campo estiver vazio, mantemos como 0 internamente para cálculos mas deixamos limpar no input
       const numValue = value === "" ? 0 : parseFloat(String(value).replace(",", ".")) || 0;
       newData[field] = numValue as any;
 
@@ -285,6 +288,7 @@ export default function App() {
         }
       } else if (field === 'rendimentoMensal') {
         const annualDiv = numValue * 12;
+        newData.dividends12m = annualDiv;
         newData.dividends12m = annualDiv;
         newData.dividendsLtmValue = annualDiv;
         if (data.price > 0) {
@@ -611,7 +615,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                             <input 
                               type="number" 
                               step="0.01"
-                              value={data.lpa}
+                              value={data.lpa === 0 ? "" : data.lpa}
                               onChange={(e) => handleIndicatorChange('lpa', e.target.value)}
                               className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                             />
@@ -638,7 +642,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                             <input 
                               type="number" 
                               step="0.01"
-                              value={data.dy}
+                              value={data.dy === 0 ? "" : data.dy}
                               onChange={(e) => handleIndicatorChange('dy', e.target.value)}
                               className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-emerald-600 dark:text-emerald-400"
                             />
@@ -653,7 +657,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                             <input 
                               type="number" 
                               step="0.01"
-                              value={data.dividendsLtmValue}
+                              value={data.dividendsLtmValue === 0 ? "" : data.dividendsLtmValue}
                               onChange={(e) => handleIndicatorChange('dividendsLtmValue', e.target.value)}
                               className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                             />
@@ -667,7 +671,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                             <input 
                               type="number" 
                               step="0.01"
-                              value={data.price}
+                              value={data.price === 0 ? "" : data.price}
                               onChange={(e) => handleIndicatorChange('price', e.target.value)}
                               className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                             />
@@ -699,7 +703,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                               <input 
                                 type="number" 
                                 step="0.10"
-                                value={data.vpa}
+                                value={data.vpa === 0 ? "" : data.vpa}
                                 onChange={(e) => handleIndicatorChange('vpa', e.target.value)}
                                 className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                               />
@@ -722,7 +726,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                               <input 
                                 type="number" 
                                 step="0.1"
-                                value={data.vacancia}
+                                value={data.vacancia === 0 ? "" : data.vacancia}
                                 onChange={(e) => handleIndicatorChange('vacancia', e.target.value)}
                                 className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                               />
@@ -736,7 +740,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                               <input 
                                 type="number" 
                                 step="0.01"
-                                value={data.rendimentoMensal}
+                                value={data.rendimentoMensal === 0 ? "" : data.rendimentoMensal}
                                 onChange={(e) => handleIndicatorChange('rendimentoMensal', e.target.value)}
                                 className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-emerald-600 dark:text-emerald-400"
                               />
@@ -751,7 +755,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                               <input 
                                 type="number" 
                                 step="0.01"
-                                value={data.benchmark}
+                                value={data.benchmark === 0 ? "" : data.benchmark}
                                 onChange={(e) => handleIndicatorChange('benchmark', e.target.value)}
                                 className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                               />
@@ -765,7 +769,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                               <input 
                                 type="number" 
                                 step="0.5"
-                                value={data.spread}
+                                value={data.spread === 0 ? "" : data.spread}
                                 onChange={(e) => handleIndicatorChange('spread', e.target.value)}
                                 className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                               />
@@ -781,7 +785,7 @@ Relatório gerado via Protocolo Investidor10 v2.5
                             <input 
                               type="number" 
                               step="0.01"
-                              value={data.price}
+                              value={data.price === 0 ? "" : data.price}
                               onChange={(e) => handleIndicatorChange('price', e.target.value)}
                               className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
                             />

@@ -444,6 +444,31 @@ Relatório gerado via Protocolo Investidor10 v2.5
     saveToStorage(updated);
   };
 
+  const loadAnalysis = (analysis: SavedAnalysis) => {
+    const ind = analysis.indicators;
+    const loadedData: TickerData = {
+      ticker: analysis.ticker,
+      type: analysis.type,
+      price: analysis.price,
+      lpa: ind.lpa || 0,
+      vpa: ind.vpa || 0,
+      roe: ind.roe || 0,
+      dy: ind.dy || 0,
+      dividendsLtmValue: ind.divs || 0,
+      dividends12m: ind.divs || 0,
+      pvp: ind.pvp || 0,
+      fiiType: (ind.fiiType as any) || 'tijolo',
+      vacancia: ind.vacancia || 0,
+      rendimentoMensal: ind.rendimentoMensal || 0,
+      benchmark: ind.benchmark || 6.20,
+      spread: ind.spread || 2,
+      history: []
+    };
+    
+    setData(loadedData);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const downloadTxt = () => {
     if (!data || !results) return;
     const analysisForReport = { data, results };
@@ -984,7 +1009,8 @@ Relatório gerado via Protocolo Investidor10 v2.5
                   key={item.id} 
                   variants={itemVariants}
                   whileHover={{ scale: 1.02 }}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-[2.5rem] shadow-xl hover:border-emerald-500/30 dark:hover:border-emerald-500/30 transition-all group relative overflow-hidden"
+                  onClick={() => loadAnalysis(item)}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-[2.5rem] shadow-xl hover:border-emerald-500/30 dark:hover:border-emerald-500/30 transition-all group relative overflow-hidden cursor-pointer active:scale-95"
                 >
                   <div className="flex justify-between items-start mb-8">
                     <div>
@@ -996,21 +1022,21 @@ Relatório gerado via Protocolo Investidor10 v2.5
                     </div>
                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all scale-90 group-hover:scale-100">
                       <button 
-                        onClick={() => shareAnalysis(item)}
+                        onClick={(e) => { e.stopPropagation(); shareAnalysis(item); }}
                         className={`p-3 rounded-2xl transition-all shadow-lg ${copySuccess === item.id ? 'bg-emerald-500 text-white' : 'bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-emerald-500'}`}
                         title="Copiar Relatório"
                       >
                         {copySuccess === item.id ? <CheckCircle2 size={16} /> : <Share2 size={16} />}
                       </button>
                       <button 
-                        onClick={() => downloadTextFile(item)}
+                        onClick={(e) => { e.stopPropagation(); downloadTextFile(item); }}
                         className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl text-slate-400 hover:text-blue-500 transition-all shadow-lg"
                         title="Download .txt"
                       >
                         <Download size={16} />
                       </button>
                       <button 
-                        onClick={() => deleteSaved(item.id)}
+                        onClick={(e) => { e.stopPropagation(); deleteSaved(item.id); }}
                         className="p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl text-slate-300 hover:text-rose-500 transition-all shadow-lg"
                         title="Excluir"
                       >

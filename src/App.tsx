@@ -17,6 +17,11 @@ interface TickerData {
   dividendsLtmValue?: number;
   dividends12m?: number;
   pvp?: number;
+  fiiType?: 'tijolo' | 'papel' | 'misto';
+  vacancia?: number;
+  rendimentoMensal?: number;
+  benchmark?: number;
+  spread?: number;
   history?: { date: string; price: number }[];
 }
 
@@ -49,6 +54,11 @@ interface SavedAnalysis {
     dy: number;
     pvp?: number;
     divs: number;
+    fiiType?: string;
+    vacancia?: number;
+    rendimentoMensal?: number;
+    benchmark?: number;
+    spread?: number;
   };
 }
 
@@ -136,20 +146,42 @@ const itemVariants = {
 };
 
 export default function App() {
-  const [ticker, setTicker] = useState("");
-  const [type, setType] = useState<"acoes" | "fiis">("acoes");
-  const [loading, setLoading] = useState(false);
   const [data, setData] = useState<TickerData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<Results | null>(null);
   const [saved, setSaved] = useState<SavedAnalysis[]>([]);
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
   const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('theme') === 'dark';
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("theme") === "dark" || 
+             (!localStorage.getItem("theme") && window.matchMedia("(prefers-color-scheme: dark)").matches);
     }
-    return false;
+    return true;
   });
+
+  const handleCreateNew = (type: 'acoes' | 'fiis') => {
+    const emptyData: TickerData = {
+      ticker: "NOVO_ATIVO",
+      type,
+      price: 0,
+      lpa: 0,
+      vpa: 0,
+      roe: 0,
+      dy: 0,
+      dividendsLtmValue: 0,
+      dividends12m: 0,
+      pvp: 0,
+      fiiType: 'tijolo',
+      vacancia: 0,
+      rendimentoMensal: 0,
+      benchmark: 6.20, // Padrão IPCA+ atual aproximado
+      spread: 2, // Padrão +2%
+      history: []
+    };
+    setData(emptyData);
+    setResults(null);
+    setError(null);
+  };
 
   // Toggle dark mode
   useEffect(() => {
@@ -190,8 +222,14 @@ export default function App() {
 
       setResults({ graham, plTarget, pvpTarget, bazin, finalPrice, margin, verdict, verdictColor });
     } else {
-      const div = tickerData.dividends12m || 0;
-      const fiiPt = div / 0.09;
+      const rendimentoMensal = tickerData.rendimentoMensal || 0;
+      const benchmark = tickerData.benchmark || 6.20;
+      const spread = tickerData.spread || 2;
+      
+      // Cálculo do Preço Teto: (Rendimento Mensal * 12) / ((Taxa Base + Spread) / 100)
+      const taxaAlvo = (benchmark + spread) / 100;
+      const fiiPt = taxaAlvo > 0 ? (rendimentoMensal * 12) / taxaAlvo : 0;
+      
       const margin = fiiPt > 0 ? ((fiiPt - tickerData.price) / fiiPt) * 100 : 0;
 
       let verdict: "PECHINCHA" | "ACEITÁVEL" | "AGUARDAR" = "AGUARDAR";
@@ -216,31 +254,50 @@ export default function App() {
     }
   }, [data]);
 
-  const handleIndicatorChange = (field: keyof TickerData, value: string) => {
+  const handleIndicatorChange = (field: keyof TickerData, value: any) => {
     if (!data) return;
-    // Allow empty string for better editing experience, convert to 0 for calc
-    const numValue = value === "" ? 0 : parseFloat(value.replace(",", ".")) || 0;
     
-    let newData = { ...data, [field]: numValue };
+    let newData = { ...data };
 
-    // Sincronização Automática: Yield % vs Reais (R$)
-    if (field === 'dy') {
-      // Se alterou a %, calcula o valor em R$ (arredonda o resultado, não o input)
-      const calculatedValue = parseFloat(((numValue / 100) * data.price).toFixed(2));
-      newData.dividendsLtmValue = calculatedValue;
-      newData.dividends12m = calculatedValue;
-    } else if (field === 'dividendsLtmValue' || field === 'dividends12m') {
-      // Se alterou o valor em R$, calcula a % (Yield) (arredonda o resultado, não o input)
-      if (data.price > 0) {
-        const calculatedYield = parseFloat(((numValue / data.price) * 100).toFixed(2));
-        newData.dy = calculatedYield;
-        // Sincroniza campos internos
-        if (field === 'dividendsLtmValue') newData.dividends12m = numValue;
-        else newData.dividendsLtmValue = numValue;
+    if (field === 'fiiType') {
+      newData.fiiType = value;
+      // Ajuste automático de spread sugerido (exemplo: tijolo é mais arriscado que papel)
+      if (value === 'tijolo') newData.spread = 3;
+      else if (value === 'papel') newData.spread = 1;
+      else newData.spread = 2; // misto
+    } else {
+      const numValue = value === "" ? 0 : parseFloat(String(value).replace(",", ".")) || 0;
+      newData[field] = numValue as any;
+
+      // Sincronização Automática: Yield % vs Reais (R$)
+      if (field === 'dy') {
+        const calculatedValue = parseFloat(((numValue / 100) * data.price).toFixed(2));
+        newData.dividendsLtmValue = calculatedValue;
+        newData.dividends12m = calculatedValue;
+        newData.rendimentoMensal = parseFloat((calculatedValue / 12).toFixed(2));
+      } else if (field === 'dividendsLtmValue' || field === 'dividends12m') {
+        if (data.price > 0) {
+          const calculatedYield = parseFloat(((numValue / data.price) * 100).toFixed(2));
+          newData.dy = calculatedYield;
+          if (field === 'dividendsLtmValue') newData.dividends12m = numValue;
+          else newData.dividendsLtmValue = numValue;
+          newData.rendimentoMensal = parseFloat((numValue / 12).toFixed(2));
+        }
+      } else if (field === 'rendimentoMensal') {
+        const annualDiv = numValue * 12;
+        newData.dividends12m = annualDiv;
+        newData.dividendsLtmValue = annualDiv;
+        if (data.price > 0) {
+          newData.dy = parseFloat(((annualDiv / data.price) * 100).toFixed(2));
+        }
+      } else if (field === 'price' && numValue > 0) {
+        newData.dy = parseFloat(((data.dividendsLtmValue / numValue) * 100).toFixed(2));
+      } else if (field === 'vpa' && numValue > 0 && data.type === 'fiis') {
+        // Atualiza P/VP se o preço mudar ou o VPA mudar
+        newData.pvp = parseFloat((data.price / numValue).toFixed(2));
+      } else if (field === 'price' && numValue > 0 && data.type === 'fiis' && data.vpa > 0) {
+        newData.pvp = parseFloat((numValue / data.vpa).toFixed(2));
       }
-    } else if (field === 'price' && numValue > 0) {
-      // Se alterou o preço de mercado, recalcula a % de Yield
-      newData.dy = parseFloat(((data.dividendsLtmValue / numValue) * 100).toFixed(2));
     }
 
     setData(newData);
@@ -276,7 +333,12 @@ export default function App() {
         roe: d.roe,
         dy: d.dy,
         pvp: d.pvp,
-        divs: type === 'acoes' ? d.dividendsLtmValue : d.dividends12m
+        divs: type === 'acoes' ? d.dividendsLtmValue : d.dividends12m,
+        fiiType: d.fiiType,
+        vacancia: d.vacancia,
+        rendimentoMensal: d.rendimentoMensal,
+        benchmark: d.benchmark,
+        spread: d.spread
       };
     } else {
       // It's SavedAnalysis
@@ -289,8 +351,15 @@ export default function App() {
       ind = analysis.indicators;
     }
 
+    const fiiExtra = type === 'fiis' ? `
+- Tipo: ${ind.fiiType?.toUpperCase()}
+- Vacância: ${ind.vacancia?.toFixed(2)}%
+- Rend. Mensal: R$ ${ind.rendimentoMensal?.toFixed(2)}
+- Taxa Alvo (IPCA+): ${ind.benchmark?.toFixed(2)}% + ${ind.spread?.toFixed(2)}%
+`.trim() : "";
+
     return `
-🤖 MARKET INTELLIGENCE TERMINAL
+🤖 ROBÔ DE VALOR - RELATÓRIO
 --------------------------------------------------
 ATIVO: ${ticker} (${type.toUpperCase()})
 PREÇO ATUAL: R$ ${price?.toFixed(2)}
@@ -300,6 +369,7 @@ PREÇO ATUAL: R$ ${price?.toFixed(2)}
 - Yield: ${ind.dy.toFixed(2)}%
 ${type === 'acoes' ? `- LPA: R$ ${ind.lpa?.toFixed(2)}\n- ROE: ${ind.roe?.toFixed(2)}%` : `- P/VP: ${ind.pvp?.toFixed(2) || 'N/A'}`}
 - Dividendo Anual: R$ ${ind.divs?.toFixed(2)}
+${fiiExtra}
 
 🎯 VALUATIONS:
 - PREÇO TETO IDEAL: R$ ${target?.toFixed(2)}
@@ -307,7 +377,7 @@ ${type === 'acoes' ? `- LPA: R$ ${ind.lpa?.toFixed(2)}\n- ROE: ${ind.roe?.toFixe
 
 🏁 VEREDITO: ${verdict}
 --------------------------------------------------
-Relatório gerado via Protocolo Investidor10 v2.4
+Relatório gerado via Protocolo Investidor10 v2.5
     `.trim();
   };
 
@@ -330,7 +400,12 @@ Relatório gerado via Protocolo Investidor10 v2.4
         roe: data.roe,
         dy: data.dy,
         pvp: data.pvp,
-        divs: data.type === 'acoes' ? (data.dividendsLtmValue || 0) : (data.dividends12m || 0)
+        divs: data.type === 'acoes' ? (data.dividendsLtmValue || 0) : (data.dividends12m || 0),
+        fiiType: data.fiiType,
+        vacancia: data.vacancia,
+        rendimentoMensal: data.rendimentoMensal,
+        benchmark: data.benchmark,
+        spread: data.spread
       }
     };
 
@@ -409,30 +484,6 @@ Relatório gerado via Protocolo Investidor10 v2.4
     URL.revokeObjectURL(url);
   };
 
-  const handleSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!ticker) return;
-
-    setLoading(true);
-    setError(null);
-    setData(null);
-    setResults(null);
-
-    try {
-      const response = await fetch(`/api/ticker/${type}/${ticker}`);
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Erro ao buscar dados");
-      }
-
-      setData(result);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'dark bg-slate-950' : 'bg-slate-50'} text-slate-900 dark:text-slate-100 font-sans p-6 md:p-12`}>
@@ -445,41 +496,36 @@ Relatório gerado via Protocolo Investidor10 v2.4
               {data ? data.ticker : "INVEST"}
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Market Intelligence Terminal</h1>
-              <p className="text-slate-500 dark:text-slate-400 flex items-center gap-2 text-sm">
-                <span className={`w-2 h-2 rounded-full ${loading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-500'}`}></span>
-                Dados via Financial API (Tempo Real)
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Robô de Valor</h1>
+              <p className="text-slate-500 dark:text-slate-400 flex items-center gap-2 text-sm font-bold italic uppercase">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Modo Offline Manual Ativado
               </p>
             </div>
           </div>
           
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <div className="grid grid-cols-2 gap-2 flex-1 md:flex-initial">
+              <button 
+                onClick={() => handleCreateNew('acoes')}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all font-black text-[10px] uppercase tracking-widest text-emerald-600 dark:text-emerald-400 shadow-sm shadow-emerald-500/5 hover:scale-105 active:scale-95 italic"
+              >
+                <TrendingUp size={14} /> Analisar Ação
+              </button>
+              <button 
+                onClick={() => handleCreateNew('fiis')}
+                className="flex items-center justify-center gap-2 px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all font-black text-[10px] uppercase tracking-widest text-orange-600 dark:text-orange-400 shadow-sm shadow-orange-500/5 hover:scale-105 active:scale-95 italic"
+              >
+                <Wallet size={14} /> Analisar FII
+              </button>
+            </div>
             <button 
               onClick={() => setDarkMode(!darkMode)}
-              className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-slate-600 dark:text-slate-400 shadow-sm active:scale-95"
+              className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-slate-600 dark:text-slate-400 shadow-sm active:scale-95"
               title={darkMode ? "Ativar Modo Luz" : "Ativar Modo Escuro"}
             >
               {darkMode ? <Sun size={20} className="text-amber-400" /> : <Moon size={20} />}
             </button>
-            <form onSubmit={handleSearch} className="flex-1 md:flex-initial flex flex-col md:flex-row gap-2 p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-lg ring-4 ring-black/5 dark:ring-white/5 transition-all focus-within:ring-emerald-500/20">
-              <div className="flex bg-slate-100 dark:bg-slate-800 rounded-2xl p-1 gap-1">
-                <button type="button" onClick={() => setType("acoes")} className={`flex-1 md:flex-initial px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-tighter transition-all ${type === "acoes" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xl scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}>Ações</button>
-                <button type="button" onClick={() => setType("fiis")} className={`flex-1 md:flex-initial px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-tighter transition-all ${type === "fiis" ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xl scale-105" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}>FIIs</button>
-              </div>
-              <div className="flex-1 flex items-center relative">
-                <Search className="absolute left-4 text-slate-400 dark:text-slate-500" size={18} />
-                <input
-                  type="text"
-                  value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                  placeholder="Ticker (ex: ITUB4)"
-                  className="w-full bg-transparent border-none focus:ring-0 py-3 pl-12 pr-4 text-sm font-black w-full md:w-56 placeholder:text-slate-300 dark:placeholder:text-slate-600 uppercase outline-none text-slate-900 dark:text-white"
-                />
-              </div>
-              <button disabled={loading || !ticker} type="submit" className="bg-emerald-600 dark:bg-emerald-600 hover:bg-emerald-700 dark:hover:bg-emerald-500 disabled:opacity-50 text-white px-8 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2">
-                {loading ? <Loader2 className="animate-spin" size={18} /> : "Analisar"}
-              </button>
-            </form>
           </div>
         </header>
 
@@ -501,7 +547,7 @@ Relatório gerado via Protocolo Investidor10 v2.4
             )}
           </AnimatePresence>
 
-          {!data && !loading && (
+          {!data && (
             <motion.div 
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
@@ -520,9 +566,9 @@ Relatório gerado via Protocolo Investidor10 v2.4
                   📡
                 </motion.div>
               </div>
-              <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter italic">Terminal de Inteligência B3</h2>
-              <p className="text-slate-400 dark:text-slate-500 text-base max-w-sm mx-auto font-medium leading-relaxed">
-                Insira o código de um ativo para processar indicadores em tempo real via protocolo financeiro de alta precisão.
+              <h2 className="text-4xl font-black text-slate-900 dark:text-white mb-4 tracking-tighter italic">Terminal Robô de Valor</h2>
+              <p className="text-slate-400 dark:text-slate-500 text-base max-w-sm mx-auto font-bold leading-relaxed italic">
+                Selecione acima se deseja analisar uma Ação ou um FII e preencha os indicadores para calcular o valuation.
               </p>
             </motion.div>
           )}
@@ -543,6 +589,19 @@ Relatório gerado via Protocolo Investidor10 v2.4
                     Terminal de Ajuste Manual
                   </h2>
                   <div className="space-y-4 relative">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Identificador (Ticker)</label>
+                      <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
+                        <input 
+                          type="text" 
+                          value={data.ticker}
+                          onChange={(e) => handleIndicatorChange('ticker', e.target.value.toUpperCase())}
+                          className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white uppercase"
+                          placeholder="EX: PETR4"
+                        />
+                      </div>
+                    </div>
+
                     {data.type === 'acoes' ? (
                       <>
                         <div className="space-y-1">
@@ -618,30 +677,100 @@ Relatório gerado via Protocolo Investidor10 v2.4
                     ) : (
                       <>
                         <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Patrimônio (VPA)</label>
-                          <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
-                            <span className="text-slate-400 font-mono text-sm mr-2">R$</span>
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              value={data.vpa}
-                              onChange={(e) => handleIndicatorChange('vpa', e.target.value)}
-                              className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
-                            />
+                          <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Tipo de Fundo</label>
+                          <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-1">
+                            {['tijolo', 'papel', 'misto'].map((t) => (
+                              <button
+                                key={t}
+                                onClick={() => handleIndicatorChange('fiiType', t)}
+                                className={`py-2 rounded-xl text-[10px] font-black uppercase transition-all ${data.fiiType === t ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm scale-105' : 'text-slate-400'}`}
+                              >
+                                {t}
+                              </button>
+                            ))}
                           </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Dividendo 12m (R$)</label>
-                          <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
-                            <span className="text-slate-400 font-mono text-sm mr-2">R$</span>
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              value={data.dividends12m}
-                              onChange={(e) => handleIndicatorChange('dividends12m', e.target.value)}
-                              className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Patrimônio (VPA)</label>
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
+                              <span className="text-slate-400 font-mono text-sm mr-2">R$</span>
+                              <input 
+                                type="number" 
+                                step="0.10"
+                                value={data.vpa}
+                                onChange={(e) => handleIndicatorChange('vpa', e.target.value)}
+                                className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">P/VP Atual</label>
+                            <div className="flex items-center bg-slate-100 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 opacity-60">
+                              <span className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white">
+                                {data.pvp?.toFixed(2) || '---'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Vacância</label>
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
+                              <input 
+                                type="number" 
+                                step="0.1"
+                                value={data.vacancia}
+                                onChange={(e) => handleIndicatorChange('vacancia', e.target.value)}
+                                className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 font-mono text-sm ml-2">%</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Rend. Mensal</label>
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
+                              <span className="text-slate-400 font-mono text-sm mr-1">R$</span>
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                value={data.rendimentoMensal}
+                                onChange={(e) => handleIndicatorChange('rendimentoMensal', e.target.value)}
+                                className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-emerald-600 dark:text-emerald-400"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Taxa Base (IPCA+)</label>
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                value={data.benchmark}
+                                onChange={(e) => handleIndicatorChange('benchmark', e.target.value)}
+                                className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 font-mono text-sm ml-2">%</span>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2 italic">Prêmio Risco</label>
+                            <div className="flex items-center bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 focus-within:ring-2 ring-emerald-500/20 transition-all">
+                              <span className="text-slate-400 font-mono text-sm mr-1">+</span>
+                              <input 
+                                type="number" 
+                                step="0.5"
+                                value={data.spread}
+                                onChange={(e) => handleIndicatorChange('spread', e.target.value)}
+                                className="w-full bg-transparent border-none outline-none font-mono font-bold text-lg text-slate-900 dark:text-white"
+                              />
+                              <span className="text-slate-400 font-mono text-sm ml-2">%</span>
+                            </div>
                           </div>
                         </div>
 
@@ -773,12 +902,23 @@ Relatório gerado via Protocolo Investidor10 v2.4
                       ) : (
                         <div className="space-y-8">
                            <div className="flex justify-between items-center">
-                            <span className="text-slate-400 text-sm">PROJEÇÃO DIVIDENDOS</span>
+                            <span className="text-slate-400 text-sm">PREÇO TETO FII</span>
                             <span className="text-3xl text-slate-900 dark:text-slate-100 italic">R$ {results.fiiPt?.toFixed(2)}</span>
                           </div>
-                          <p className="text-xs text-slate-400 dark:text-slate-500 italic bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-                            Protocolo FII: Rendimento Projetado de 9% a.a sobre o fluxo de dividendos acumulado dos últimos 12 meses.
-                          </p>
+                          <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 space-y-2">
+                             <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest italic">Fórmula Aplicada:</p>
+                             <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400">
+                               (Rend. Mensal × 12) ÷ ((Benchmark + Spread) / 100)
+                             </p>
+                             <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-2 text-[10px] text-slate-400 font-medium">
+                               Taxa Alvo Final: <span className="text-slate-600 dark:text-slate-300 font-bold">{( (data.benchmark || 0) + (data.spread || 0) ).toFixed(2)}% a.a</span>
+                             </div>
+                             {data.vacancia !== undefined && data.vacancia > 10 && (
+                               <div className="flex items-center gap-2 text-[10px] text-rose-500 font-black uppercase italic mt-1">
+                                 <AlertTriangle size={10} /> Alerta: Vacância Elevada ({data.vacancia}%)
+                               </div>
+                             )}
+                          </div>
                         </div>
                       )}
                     </div>

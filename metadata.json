@@ -1,0 +1,6 @@
+{
+  "name": "Robô Analista Investidor10",
+  "description": "Analista financeiro automatizado que extrai dados reais do Investidor10 para calcular o preço teto ideal de ações e FIIs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

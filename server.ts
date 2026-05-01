@@ -1,15 +1,28 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import YahooFinance from "yahoo-finance2";
+import yahooFinance from "yahoo-finance2";
 import path from "path";
+import { fileURLToPath } from "url";
 
-const yahooFinance = new (YahooFinance as any)();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Request logger for debugging
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", env: process.env.NODE_ENV });
+  });
 
   // API Route for Ticker Data using Yahoo Finance
   app.get("/api/ticker/:type/:ticker", async (req, res) => {
@@ -108,10 +121,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.resolve(__dirname, "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      res.sendFile(path.resolve(distPath, "index.html"));
     });
   }
 

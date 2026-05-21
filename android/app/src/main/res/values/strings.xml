@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Robo de Valor</string>
+    <string name="title_activity_main">Robo de Valor</string>
+    <string name="package_name">com.robodevalor.app</string>
+    <string name="custom_url_scheme">com.robodevalor.app</string>
+</resources>
